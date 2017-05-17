@@ -1,0 +1,9 @@
+[package]
+name = "fpv"
+version = "0.1.0"
+authors = ["Robert Wettstädt <robert.wett@gmail.com>"]
+
+[dependencies]
+core-foundation = "^0.3"
+core-graphics = { git = "https://github.com/servo/core-graphics-rs" }
+image = "*"
