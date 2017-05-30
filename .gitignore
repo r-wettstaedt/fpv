@@ -160,5 +160,5 @@ $RECYCLE.BIN/
 
 # End of https://www.gitignore.io/api/git,rust,macos,windows,intellij,sublimetext
 
-# Latex folder
-/latex/
+# Custom
+.idea
