@@ -9,35 +9,62 @@ use wifi_drone::video::VideoListener;
 extern crate cpp;
 
 cpp!{{
+    // tracking
 	#include <opencv2/core/utility.hpp>
 	#include <opencv2/tracking.hpp>
 	#include <opencv2/videoio.hpp>
 	#include <opencv2/highgui.hpp>
+
+	// detection
+	#include <opencv2/objdetect.hpp>
+    #include <opencv2/highgui.hpp>
+    #include <opencv2/imgproc.hpp>
+
 	#include <iostream>
 	#include <cstring>
 
 	using namespace std;
 	using namespace cv;
 
-	static Mat image;
+    // tracking
 	static Rect2d boundingBox;
-	static bool paused;
 	static bool selectObject = false;
-	static bool startSelection = false;
 	static bool initialized = false;
-	static Ptr<Tracker> tracker;
-	static String tracker_algorithm = "BOOSTING";
+	static String trackerAlgorithm = "BOOSTING";
+	static Ptr<Tracker> tracker = Tracker::create(trackerAlgorithm);
 
-	void init() {
-	    tracker = Tracker::create(tracker_algorithm);
+	// detection
+	static string cascadeName = "out/haarcascade.xml";
+    static CascadeClassifier cascade;
 
-		boundingBox.x = 347;
-		boundingBox.y = 85;
-		boundingBox.width = 73;
-		boundingBox.height = 70;
+    void detect(int32_t * & result, const int32_t * & buf, const int32_t width, const int32_t height) {
+        if (initialized || selectObject) {
+            return;
+        }
 
-		selectObject = true;
-	}
+        Mat frame = Mat(height, width, CV_8UC4, &buf);
+        Mat grayFrame, smallFrame;
+        vector<Rect> faces;
+
+        if (!cascade.load(cascadeName)) {
+            cout << "***Could not load classifier cascade...***\n";
+        }
+
+        cvtColor(frame, grayFrame, COLOR_BGR2GRAY);
+        resize(grayFrame, smallFrame, Size(), 1, 1, INTER_LINEAR);
+        equalizeHist(smallFrame, smallFrame);
+        cascade.detectMultiScale(smallFrame, faces, 1.1, 2, 0 | CASCADE_SCALE_IMAGE, Size(30, 30));
+
+        if (faces.size() > 0) {
+            boundingBox = faces.front();
+            selectObject = true;
+        } else {
+            boundingBox.x = 0;
+            boundingBox.y = 0;
+            boundingBox.width = 0;
+            boundingBox.height = 0;
+        }
+    }
 
     void track(int32_t * & result, const int32_t * & buf, const int32_t width, const int32_t height) {
 		Mat frame = Mat(height, width, CV_8UC4, &buf);
@@ -60,12 +87,6 @@ cpp!{{
 }}
 
 fn main() {
-    unsafe {
-        cpp!([] {
-            init();
-        });
-    }
-
     let listener = VideoListener::new(cb);
     wifi_drone::connect(listener);
 }
@@ -89,7 +110,11 @@ fn cb(data: &mut [u8], width: u32, height: u32) {
     let mut bounding_box: &mut [u32; 4] = &mut [0; 4];
     unsafe {
         cpp!([mut bounding_box as "int32_t *", buf as "int32_t *", width as "int32_t", height as "int32_t"] {
-            track(bounding_box, buf, width, height);
+            if (selectObject) {
+                track(bounding_box, buf, width, height);
+            } else {
+                detect(bounding_box, buf, width, height);
+            }
         });
     }
 
